@@ -10,7 +10,7 @@ class VentanaMonitoreo:
     def __init__(self, root, controlador_factory):
         self.root = root
         self.controlador_factory = controlador_factory
-        self.controlador = self.controlador_factory(4)
+        self.controlador = self.controlador_factory(4, "procesos", 10000)
         
         self.root.title("EcoMonitor Industrial v3.5 - Cuenca")
         self.root.geometry("1400x900")
@@ -68,6 +68,25 @@ class VentanaMonitoreo:
         self.sel_modo.current(2)
         self.sel_modo.pack(side="left", padx=5)
         
+        ttk.Label(top_bar, text="Carga Comp.:", background=self.colors["card"]).pack(side="left", padx=5)
+        self.slider_carga = tk.Scale(
+            top_bar,
+            from_=0,
+            to=50000,
+            orient="horizontal",
+            bg=self.colors["card"],
+            fg=self.colors["text"],
+            troughcolor="#2b2b2b",
+            activebackground=self.colors["accent"],
+            highlightthickness=0,
+            bd=0,
+            length=150,
+            font=("Segoe UI", 9),
+            command=self._actualizar_carga_dinamica
+        )
+        self.slider_carga.set(10000)
+        self.slider_carga.pack(side="left", padx=10)
+        
         self.btn_run = tk.Button(top_bar, text="INICIAR SIMULACIÓN", bg=self.colors["success"], fg="#000", font=("Segoe UI", 11, "bold"), command=self._iniciar_simulacion, relief="flat", padx=25)
         self.btn_run.pack(side="left", padx=40)
         
@@ -77,7 +96,7 @@ class VentanaMonitoreo:
         self.lbl_timer = tk.Label(status_bar, text="TIEMPO: 00:00:00", bg="#000", fg=self.colors["text_dim"], font=("Consolas", 10))
         self.lbl_timer.pack(side="left", padx=20)
         
-        env = f"{platform.system()} | Python {sys.version.split()[0]} | {multiprocessing.cpu_count()} Cores | GIL: Enabled"
+        env = f"{platform.system()} | Python {sys.version.split()[0]} | {multiprocessing.cpu_count()} Cores | GIL: {sys._is_gil_enabled()}"
         tk.Label(status_bar, text=env, bg="#000", fg=self.colors["text_dim"], font=("Segoe UI", 9)).pack(side="right", padx=20)
 
         # 3. CUERPO (3 PANELES)
@@ -126,12 +145,7 @@ class VentanaMonitoreo:
         self.progress = ttk.Progressbar(footer, orient="horizontal", mode="determinate", length=800)
         self.progress.pack(padx=100, fill="x")
         
-        btns = tk.Frame(footer, bg=self.colors["card"])
-        btns.pack(pady=10)
-        self.btn_pause = tk.Button(btns, text="PAUSAR", width=15, bg=self.colors["warning"], command=self._pausar)
-        self.btn_pause.pack(side="left", padx=10)
-        self.btn_stop = tk.Button(btns, text="DETENER", width=15, bg=self.colors["danger"], fg="#fff", command=self._detener)
-        self.btn_stop.pack(side="left", padx=10)
+
 
         self._dibujar_estaciones()
         self._dibujar_kpis()
@@ -227,8 +241,9 @@ class VentanaMonitoreo:
         n_est = int(self.sel_estaciones.get())
         ciclos = int(self.sel_ciclos.get())
         modo = self.sel_modo.get().lower()
+        carga = int(self.slider_carga.get())
         
-        self.controlador = self.controlador_factory(n_est)
+        self.controlador = self.controlador_factory(n_est, modo, carga)
         self._configurar_controlador()
         self._dibujar_estaciones()
         self.txt_alertas.delete(1.0, tk.END)
@@ -239,9 +254,7 @@ class VentanaMonitoreo:
         self.btn_run.config(state="disabled")
         
         def run():
-            if modo == "secuencial": res = self.controlador.ejecutar_secuencial(ciclos)
-            elif modo == "hilos": res = self.controlador.ejecutar_hilos(ciclos)
-            else: res = self.controlador.ejecutar_procesos(ciclos)
+            res = self.controlador.ejecutar(ciclos)
             self.root.after(0, self._mostrar_final, res)
             
         threading.Thread(target=run, daemon=True).start()
@@ -260,11 +273,8 @@ class VentanaMonitoreo:
         print(f"Estaciones: {res['numero_estaciones']} Ciclos: {res['ciclos']} Modo: {res['modo']}")
         print(txt)
 
-    def _pausar(self):
-        self.controlador.pausar()
-        self.btn_pause.config(text="REANUDAR" if self.btn_pause["text"]=="PAUSAR" else "PAUSAR")
 
-    def _detener(self):
-        self.controlador.detener()
-        self.running = False
-        self.btn_run.config(state="normal")
+
+    def _actualizar_carga_dinamica(self, valor):
+        if hasattr(self, 'controlador') and self.controlador:
+            self.controlador.set_carga_computacional(int(valor))

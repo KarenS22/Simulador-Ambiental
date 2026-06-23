@@ -1,7 +1,20 @@
-from core.controlador import ControladorMonitoreo
 from gui.ventana import VentanaMonitoreo
 import tkinter as tk
 import sys
+
+def controlador_factory(n, modo, carga_computacional=10000):
+    modo = modo.lower()
+    if modo == "secuencial":
+        from core.secuencial.controlador import ControladorSecuencial
+        return ControladorSecuencial(n, carga_computacional)
+    elif modo == "hilos":
+        from core.hilos.controlador import ControladorHilos
+        return ControladorHilos(n, carga_computacional)
+    elif modo == "procesos":
+        from core.procesos.controlador import ControladorProcesos
+        return ControladorProcesos(n, carga_computacional)
+    else:
+        raise ValueError(f"Modo desconocido: {modo}")
 
 def main():
     if "--cli" in sys.argv:
@@ -11,11 +24,7 @@ def main():
 
 def run_gui():
     root = tk.Tk()
-    
-    # Factory para reiniciar el controlador con diferente número de estaciones
-    def controlador_factory(n):
-        return ControladorMonitoreo(n)
-        
+    print(VentanaMonitoreo)    
     app = VentanaMonitoreo(root, controlador_factory)
     root.mainloop()
 
@@ -26,14 +35,10 @@ def run_cli():
     print(f"OS: {platform.system()} | Python: {sys.version.split()[0]}")
     print(f"Núcleos detectados: {multiprocessing.cpu_count()}")
     
-    # Configuración por defecto para CLI
-    controlador = ControladorMonitoreo(4)
-    
     for modo in ["secuencial", "hilos", "procesos"]:
         print(f"\nEjecutando versión {modo.upper()} (10 ciclos)...")
-        if modo == "secuencial": res = controlador.ejecutar_secuencial(10)
-        elif modo == "hilos": res = controlador.ejecutar_hilos(10)
-        else: res = controlador.ejecutar_procesos(10)
+        controlador = controlador_factory(4, modo, 10000)
+        res = controlador.ejecutar(10)
         
         print(f"Terminado en {res['tiempo_ejecucion']:.4f}s. Mediciones: {res['mediciones_procesadas']}")
 
