@@ -1,16 +1,16 @@
-import time
 import math
 
-class AnalizadorDatos:
-    def __init__(self, umbrales=None):
-        self.umbrales = umbrales or {
+class BaseAnalizador:
+    def __init__(self, carga_computacional=10000):
+        self.umbrales = {
             "Temperatura": 30.0,
             "Humedad": 90.0,
-            "Ruido": 70.0,
+            # "Ruido": 70.0,
             "CO2": 1000.0,
-            "PM2.5": 50.0,
-            "PM10": 100.0
+            # "PM2.5": 50.0,
+            # "PM10": 100.0
         }
+        self.carga_computacional = carga_computacional
 
     def realizar_analisis_pesado(self, mediciones):
         """
@@ -18,7 +18,7 @@ class AnalizadorDatos:
         sobre las mediciones para que el paralelismo tenga sentido.
         """
         # Cálculos intensivos de CPU ficticios
-        for _ in range(10000):
+        for _ in range(self.carga_computacional):
             _ = [math.sqrt(m.valor) * math.log(m.valor + 1) for m in mediciones if m.valor > 0]
             
     def procesar_mediciones(self, mediciones):
@@ -26,6 +26,11 @@ class AnalizadorDatos:
             return {}
 
         self.realizar_analisis_pesado(mediciones)
+        return self.procesar_mediciones_rapido(mediciones)
+
+    def procesar_mediciones_rapido(self, mediciones):
+        if not mediciones:
+            return {}
 
         stats = {}
         for m in mediciones:
