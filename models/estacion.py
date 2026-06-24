@@ -6,11 +6,10 @@ class EstacionAmbiental:
         self.id_estacion = id_estacion
         self.nombre = nombre
         self.zona = zona
-        # Usaremos estas 3 variables fijas para cumplir con el requerimiento de "al menos 3 tipos"
         self.variables_fijas = ["Temperatura", "Humedad", "CO2"]
 
     def generar_mediciones_ciclo(self):
-        """Genera una medición por cada variable obligatoria"""
+        """Genera una medición por cada variable"""
         mediciones = []
         for var in self.variables_fijas:
             mediciones.append(self.generar_medicion(var))
@@ -20,7 +19,7 @@ class EstacionAmbiental:
         if variable is None:
             variable = random.choice(self.variables_fijas)
         
-        # Simulación de valores realistas para Cuenca
+        # Simulación de valores realistas 
         valores = {
             "Temperatura": random.uniform(8, 26), 
             "Humedad": random.uniform(30, 95),

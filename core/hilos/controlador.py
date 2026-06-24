@@ -8,6 +8,7 @@ class ControladorHilos(BaseControlador):
         self.analizador = AnalizadorHilos(carga_computacional)
         super().__init__(num_estaciones, carga_computacional)
         self.barrier = None
+        self.lock = threading.Lock()
 
     def ejecutar(self, ciclos=10):
         self._preparar_ejecucion("Hilos", ciclos)
@@ -28,8 +29,11 @@ class ControladorHilos(BaseControlador):
         for ciclo in range(ciclos):
             self._notificar_estado(estacion.id_estacion, "activa")
             mediciones = estacion.generar_mediciones_ciclo()
+            self.analizador.realizar_analisis_pesado(mediciones)
+            
             for medicion in mediciones:
-                self.registrar_medicion(medicion, realizar_analisis=True)
+                with self.lock:
+                    self.registrar_medicion(medicion, realizar_analisis=False)
             
             self._notificar_estado(estacion.id_estacion, "esperando")
             try:

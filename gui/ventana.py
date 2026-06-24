@@ -12,7 +12,7 @@ class VentanaMonitoreo:
         self.controlador_factory = controlador_factory
         self.controlador = self.controlador_factory(4, "procesos", 10000)
         
-        self.root.title("EcoMonitor Industrial v3.5 - Cuenca")
+        self.root.title("EcoMonitor v3.5 - Cuenca")
         self.root.geometry("1400x900")
         self.root.configure(bg="#0a0a0a") # Negro profundo
         
