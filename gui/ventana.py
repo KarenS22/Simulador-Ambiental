@@ -64,7 +64,7 @@ class VentanaMonitoreo:
         self.sel_ciclos.pack(side="left", padx=5)
         
         ttk.Label(top_bar, text="Modo:", background=self.colors["card"]).pack(side="left", padx=5)
-        self.sel_modo = ttk.Combobox(top_bar, values=["Secuencial", "Hilos", "Procesos"], width=15, state="readonly")
+        self.sel_modo = ttk.Combobox(top_bar, values=["Secuencial", "Hilos", "Procesos", "MPI"], width=15, state="readonly")
         self.sel_modo.current(2)
         self.sel_modo.pack(side="left", padx=5)
         
@@ -242,6 +242,20 @@ class VentanaMonitoreo:
         ciclos = int(self.sel_ciclos.get())
         modo = self.sel_modo.get().lower()
         carga = int(self.slider_carga.get())
+        
+        if modo == "mpi":
+            try:
+                from mpi4py import MPI
+                size = MPI.COMM_WORLD.Get_size()
+            except ImportError:
+                size = 1
+            if size <= 1:
+                from tkinter import messagebox
+                messagebox.showwarning(
+                    "Advertencia MPI",
+                    "Se seleccionó el modo MPI pero la aplicación no fue iniciada con 'mpirun' "
+                    "(un solo proceso detectado). La simulación se ejecutará de forma secuencial en este nodo."
+                )
         
         self.controlador = self.controlador_factory(n_est, modo, carga)
         self._configurar_controlador()
