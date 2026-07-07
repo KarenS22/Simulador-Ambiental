@@ -2,30 +2,79 @@
 
 Este proyecto simula un sistema urbano de monitoreo ambiental para la ciudad de Cuenca, aplicando conceptos de paralelismo y concurrencia.
 
-Simula estaciones distribuidas que miden Temperatura, Humedad y CO2, utilizando tres paradigmas de programación en Python: **Secuencial**, **Multiprocessing** (Paralelismo) y **Threading** (Concurrencia).
+Simula estaciones distribuidas que miden Temperatura, Humedad y CO2, utilizando cuatro paradigmas de programación en Python: **Secuencial**, **Multiprocessing** (Paralelismo local), **Threading** (Concurrencia local) y **MPI** (Paso de mensajes en clúster utilizando múltiples computadoras).
 
-## Instalación y Requisitos
+---
 
-### Requisitos 
-- Python 3.13.5 o 3.14.5 (Revisar versiones sin GIL)
-- Bibliotecas estándar (`tkinter`, `threading`, `multiprocessing`, `time`, `math`)
+## Instalación y Requisitos (Clúster de 3 Computadoras Físicas)
 
-### Instrucciones de Instalación
-1. Clonar el repositorio:
+Para ejecutar la versión distribuida con MPI a través de una red local real usando 3 PCs físicas (en entornos basados en **Arch Linux / Manjaro**), se requiere cumplir con las siguientes condiciones de compatibilidad y red:
+
+### Requisitos Obligatorios
+1. **Misma versión de Python:** Cada uno de los 3 nodos del clúster físico debe utilizar **exactamente la misma versión de Python** (por ejemplo: `3.13.x` o `3.14.x`). Diferencias de versión causarán errores de serialización con `mpi4py`.
+2. **Dependencias del Sistema (Arch Linux / Manjaro):**
+   * Configurar **MPICH** y **SSH** en todas las computadoras.
+   * Instalar el soporte de almacenamiento en red (`cifs-utils` y `samba`).
+
+### Paso 1: Clonación del Repositorio (Clonar la rama mpi)
+Clona el repositorio directamente apuntando a la rama del proyecto que contiene la implementación de MPI:
+```bash
+git clone -b mpi https://github.com/KarenS22/Simulador-Ambiental.git
+cd Simulador-Ambiental
+```
+
+### Paso 2: Instalación de Dependencias
+Instalar `mpi4py` (en cada máquina):
+```bash
+pip install mpi4py
+```
+
+### Paso 3: Configurar Acceso SSH sin Contraseña
+Para que MPI pueda iniciar los procesos trabajadores de forma remota, el nodo coordinador debe comunicarse con los esclavos sin que se le solicite contraseña:
+* Generar llaves ed25519/rsa en la máquina coordinadora.
+* Copiar la llave pública del coordinador a todos los nodos del clúster (`ssh-copy-id`) para habilitar el ingreso directo por SSH.
+
+### Paso 4: Montar Carpeta Compartida (`cifs-utils` y Samba)
+Para garantizar que todos los nodos ejecuten la misma versión del código y lean los mismos archivos, la máquina principal comparte la carpeta del proyecto a través de Samba para que las demás la monten:
+
+1. **PC Principal:** Monta el servidor Samba compartiendo la carpeta del proyecto.
+2. **PC Secundarias (Nodos Esclavos):** Instalar el cliente y montar la carpeta compartida en una ruta absoluta idéntica (ejemplo: `/home/flamenco/home`):
    ```bash
-   git clone https://github.com/KarenS22/Simulador-Ambiental.git
-   cd Simulador-Ambiental
+   sudo pacman -S cifs-utils
+   sudo mkdir -p /home/flamenco/home
+   
+   # Comando de montaje
+   sudo mount -t cifs //IP_COORD/Simulador-Ambiental /home/flamenco/home -o username=usuario_samba,password=clave_samba,uid=$UID,gid=$(id -g)
    ```
-2. Verificar la versión de Python:
-   ```bash
-   python3 --version
-   ```
+
+---
 
 ## Ejecución
 
+### Ejecución Local Estándar (Modos: Secuencial, Hilos, Procesos)
+Para probar localmente de manera clásica:
 ```bash
 python3 main.py
 ```
+
+### Ejecución con MPI (Clúster Distribuido)
+Para arrancar la simulación sobre las 3 máquinas físicas conectadas:
+
+1. **Configurar hosts (`mpi_hosts`):**
+   Asegúrate de que el archivo `mpi_hosts` en la carpeta compartida del proyecto tenga la estructura de estos nodos:
+   ```text
+   cthulhu:4
+   slave2:4
+   slave1:4
+   ```
+2. **Ejecutar el comando desde el Coordinador (`cthulhu`):**
+   ```bash
+   mpiexec -f mpi_hosts -n 11 python3 /home/flamenco/home/main.py
+   ```
+   * **Nodo Coordinador (cthulhu):** Levantará la interfaz gráfica (GUI) y procesará los eventos.
+   * **Nodos Esclavos (slave1, slave2):** Reciben comandos por red vía SSH de manera imperceptible y procesan las simulaciones de las estaciones asignadas, enviando resultados en tiempo real al coordinador.
+
+---
 
 ## Interfaz de Usuario
 A continuación se muestra la interfaz gráfica del sistema:
@@ -34,25 +83,34 @@ A continuación se muestra la interfaz gráfica del sistema:
 | :---: | :---: | 
 | ![Dashboard](screenshots/gui_main.png) | ![Alertas](screenshots/gui_alerts.png) |
 
-## Comparativa de Rendimiento
+---
 
-Los resultados obtenidos muestran la escalabilidad del sistema en tres niveles de prueba (16 núcleos, Carga 10,000):
+## Comparativa de Rendimiento y Escalabilidad en Clúster (MPI)
 
-| Simulación | Secuencial | Hilos (Threading) | Procesos (Multproc.) |
-| :--- | :---: | :---: | :---: |
-| **4 Est. / 10 Ciclos** | 4.05s | **0.19s** | 0.28s |
-| **8 Est. / 20 Ciclos** | 17.23s | **0.78s** | 0.86s |
-| **12 Est. / 30 Ciclos** | 39.61s | **1.75s** | 1.97s |
+Los resultados obtenidos prueban la escalabilidad y comportamiento del sistema distribuido sobre el clúster físico de 3 nodos (`cthulhu`, `slave1`, `slave2`).
+
+### Escalamiento del Clúster (Variando N | Carga = 10,000 | Ciclos = 10)
+Se midió el tiempo de ejecución lanzando diferentes cantidades de procesos concurrentes ($N$) mediante `mpiexec`:
+
+| Procesos ($N$) | 4 Estaciones ($T_{4E}$) | 8 Estaciones ($T_{8E}$) | 12 Estaciones ($T_{12E}$) | Aceleración ($S$) en 12E |
+| :---: | :---: | :---: | :---: | :---: |
+| **N = 1** (Secuencial) | 0.493s | 1.000s | 1.565s | 1.00x |
+| **N = 4** | 0.361s | 0.564s | 0.739s | 2.11x |
+| **N = 8** | **0.313s** | **0.476s** | **0.516s** | **3.03x** |
+| **N = 12** | 0.512s | 0.580s | 0.559s | 2.80x |
+
+ 
+> A partir de $N=12$, el rendimiento decrece debido a que la sobrecarga del paso de mensajes TCP/IP y latencia de red de Samba supera el beneficio del paralelismo para cargas ligeras.
 
 
-> **Análisis del GIL:** Al utilizar Python (Free-threaded), la versión de hilos no se ve penalizada por el GIL. En las pruebas, Hilos fue más rápido que Procesos, ya que aprovechan el paralelismo real de CPU sin el costo adicional de crear procesos o pasar datos por colas (IPC).
+---
 
 ## Arquitectura del Proyecto
 
 ```mermaid
 graph TD
     UI[Interfaz Tkinter] -->|Configuración| Ctrl[Controlador Monitoreo]
-    Ctrl -->|Strategy| M[Modos: Secuencial / Hilos / Procesos]
+    Ctrl -->|Strategy| M[Modos: Secuencial / Hilos / Procesos / MPI]
     M -->|Instancia| Est[Estaciones Ambientales]
     Est -->|Genera| Med[Mediciones]
     Med -->|Análisis Pesado| Ana[Analizador de Datos]
@@ -61,14 +119,10 @@ graph TD
     Stats --> UI
 ```
 
+---
+
 ## Estructura del Proyecto
-- `core/`: Lógica central (Controlador, Analizador).
+- `core/`: Lógica central (módulos secuencial, hilos, procesos y mpi con sus respectivos controladores y workers).
 - `models/`: Clases de datos (Estación, Medición, Alerta).
 - `gui/`: Interfaz gráfica con Tkinter.
 - `main.py`: Punto de entrada del sistema.
-
-
-
-## Comando de ejecución
-
-mpiexec -f mpi_hosts -n 11 python /home/flamenco/home/main.py
