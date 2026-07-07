@@ -164,6 +164,23 @@ class VentanaMonitoreo:
             tk.Label(f, text=est.nombre, bg=self.colors["card"], fg=self.colors["accent"], font=("Segoe UI", 11, "bold")).pack(anchor="w")
             tk.Label(f, text=est.zona, bg=self.colors["card"], fg=self.colors["text_dim"], font=("Segoe UI", 8)).pack(anchor="w")
             
+            # Si es modo MPI, mostrar información del proceso (Rank, PID, Host)
+            mpi_lbls = {}
+            if self.sel_modo.get().lower() == "mpi":
+                mpi_frame = tk.Frame(f, bg=self.colors["card"])
+                mpi_frame.pack(fill="x", pady=2)
+                
+                lbl_rank = tk.Label(mpi_frame, text="Rank: --", bg=self.colors["card"], fg=self.colors["accent"], font=("Segoe UI", 8))
+                lbl_rank.pack(side="left", padx=(0, 5))
+                
+                lbl_pid = tk.Label(mpi_frame, text="PID: --", bg=self.colors["card"], fg=self.colors["accent"], font=("Segoe UI", 8))
+                lbl_pid.pack(side="left", padx=5)
+                
+                lbl_host = tk.Label(mpi_frame, text="Host: --", bg=self.colors["card"], fg=self.colors["accent"], font=("Segoe UI", 8))
+                lbl_host.pack(side="left", padx=5)
+                
+                mpi_lbls = {"rank": lbl_rank, "pid": lbl_pid, "host": lbl_host}
+            
             vars_frame = tk.Frame(f, bg=self.colors["card"])
             vars_frame.pack(fill="x", pady=5)
             
@@ -173,7 +190,7 @@ class VentanaMonitoreo:
                 l.pack(anchor="w")
                 labels[v] = l
             
-            self.station_widgets[est.id_estacion] = {"badge": badge, "vars": labels}
+            self.station_widgets[est.id_estacion] = {"badge": badge, "vars": labels, "mpi": mpi_lbls}
 
     def _dibujar_kpis(self):
         for w in self.kpi_frame.winfo_children(): w.destroy()
@@ -210,6 +227,14 @@ class VentanaMonitoreo:
             if id_est in self.station_widgets:
                 colors = {"activa": self.colors["success"], "esperando": self.colors["warning"], "finalizada": "#444", "procesando": self.colors["process"]}
                 self.station_widgets[id_est]["badge"].config(text=est.upper(), bg=colors.get(est, "#333"))
+
+        elif tipo == "info_proceso":
+            id_est, pid, rank, host = data
+            w = self.station_widgets.get(id_est)
+            if w and "mpi" in w and w["mpi"]:
+                w["mpi"]["pid"].config(text=f"PID: {pid}")
+                w["mpi"]["rank"].config(text=f"Rank: {rank}")
+                w["mpi"]["host"].config(text=f"Host: {host}")
 
         elif tipo == "alerta":
             self.txt_alertas.insert(tk.END, f"⚠ {time.strftime('%H:%M:%S')} - {data}\n")

@@ -19,6 +19,35 @@ class ControladorMPI(BaseControlador):
         # Fallback si size == 1 (ejecución secuencial en el rank 0)
         if size <= 1:
             print("[ControladorMPI] ADVERTENCIA: Corriendo en modo fallback local (un solo proceso).", flush=True)
+            
+            # Notificar información del proceso para el modo local fallback
+            import os
+            import socket
+            pid = os.getpid()
+            hostname = socket.gethostname()
+            display_host = hostname
+            try:
+                controlador_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(os.path.dirname(controlador_dir))
+                mpi_hosts_path = os.path.join(project_root, "mpi_hosts")
+                if os.path.exists(mpi_hosts_path):
+                    with open(mpi_hosts_path, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#"):
+                                continue
+                            parts = line.split(":")
+                            host_in_file = parts[0].strip()
+                            if host_in_file.lower() in hostname.lower() or hostname.lower() in host_in_file.lower():
+                                display_host = host_in_file
+                                break
+            except Exception:
+                pass
+                
+            for est in self.estaciones:
+                if self.callback_ui:
+                    self.callback_ui("info_proceso", (est.id_estacion, pid, 0, display_host))
+
             for ciclo in range(ciclos):
                 self.metricas["ciclo_actual"] = ciclo + 1
                 self.metricas["progreso"] = ((ciclo + 1) / ciclos) * 100
@@ -37,12 +66,43 @@ class ControladorMPI(BaseControlador):
             self._finalizar_ejecucion(start_time)
             return self.metricas
 
-        # Si size > 1, distribuir estaciones entre workers (rank 1 a size - 1)
-        num_workers = size - 1
+        # Si size > 1, distribuir estaciones entre TODOS los procesos (incluyendo Rank 0)
         worker_assignments = {r: [] for r in range(1, size)}
+        local_assignments = []
         for i, est in enumerate(self.estaciones):
-            w_rank = 1 + (i % num_workers)
-            worker_assignments[w_rank].append(est)
+            r = i % size
+            if r == 0:
+                local_assignments.append(est)
+            else:
+                worker_assignments[r].append(est)
+
+        # Notificar información del proceso local (Rank 0) para las estaciones asignadas a él
+        import os
+        import socket
+        pid = os.getpid()
+        hostname = socket.gethostname()
+        display_host = hostname
+        try:
+            controlador_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(controlador_dir))
+            mpi_hosts_path = os.path.join(project_root, "mpi_hosts")
+            if os.path.exists(mpi_hosts_path):
+                with open(mpi_hosts_path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        parts = line.split(":")
+                        host_in_file = parts[0].strip()
+                        if host_in_file.lower() in hostname.lower() or hostname.lower() in host_in_file.lower():
+                            display_host = host_in_file
+                            break
+        except Exception:
+            pass
+
+        for est in local_assignments:
+            if self.callback_ui:
+                self.callback_ui("info_proceso", (est.id_estacion, pid, 0, display_host))
             
         # Enviar parámetros de simulación y estaciones asignadas a cada worker
         for r in range(1, size):
@@ -51,11 +111,21 @@ class ControladorMPI(BaseControlador):
 
         # Recibir mediciones y estados en bucle por cada ciclo
         num_estaciones = len(self.estaciones)
-        mediciones_por_ciclo = num_estaciones * 3 # 3 variables por estación
+        mediciones_esperadas = (num_estaciones - len(local_assignments)) * 3
 
         for ciclo in range(ciclos):
+            # Procesar estaciones asignadas localmente a Rank 0
+            for est in local_assignments:
+                self._notificar_estado(est.id_estacion, "activa")
+                mediciones = est.generar_mediciones_ciclo()
+                self.analizador.realizar_analisis_pesado(mediciones)
+                for medicion in mediciones:
+                    self.registrar_medicion(medicion, realizar_analisis=False)
+                self._notificar_estado(est.id_estacion, "esperando")
+
+            # Recibir mediciones de los workers
             mediciones_recibidas = 0
-            while mediciones_recibidas < mediciones_por_ciclo:
+            while mediciones_recibidas < mediciones_esperadas:
                 try:
                     msg = comm.recv(source=MPI.ANY_SOURCE)
                     if msg is None:
@@ -67,6 +137,10 @@ class ControladorMPI(BaseControlador):
                     elif msg_type == "estado":
                         id_est, status = data
                         self._notificar_estado(id_est, status)
+                    elif msg_type == "info_proceso":
+                        id_est, pid, rank, host = data
+                        if self.callback_ui:
+                            self.callback_ui("info_proceso", (id_est, pid, rank, host))
                 except Exception as e:
                     print(f"[ControladorMPI] Error en recepción: {e}", flush=True)
                     break
