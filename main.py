@@ -4,8 +4,17 @@ import sys
 # Asegurar que el directorio raíz esté en sys.path para importaciones correctas en entornos MPI distribuidos
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from gui.ventana import VentanaMonitoreo
-import tkinter as tk
+# Auto-detectar interfaz física y establecer UCX_NET_DEVICES para evitar cuelgues de red en UCX (MPICH)
+if "UCX_NET_DEVICES" not in os.environ:
+    try:
+        ifaces = os.listdir('/sys/class/net')
+        for iface in ["wlan0", "wlp4s0"]:
+            if iface in ifaces:
+                os.environ["UCX_NET_DEVICES"] = iface
+                break
+    except Exception:
+        pass
+
 
 def controlador_factory(n, modo, carga_computacional=10000):
     modo = modo.lower()
@@ -25,12 +34,20 @@ def controlador_factory(n, modo, carga_computacional=10000):
         raise ValueError(f"Modo desconocido: {modo}")
 
 def main():
+    pmi_rank = int(os.environ.get('PMI_RANK', os.environ.get('OMPI_COMM_WORLD_RANK', -1)))
+    pmi_size = int(os.environ.get('PMI_SIZE', os.environ.get('OMPI_COMM_WORLD_SIZE', -1)))
+
     try:
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
-    except ImportError:
+    except ImportError as e:
+        # Si se está ejecutando bajo mpiexec/mpirun, no debemos ignorar la falla de importación de mpi4py
+        if pmi_rank != -1:
+            import socket
+            print(f"[ERROR MPI] Proceso con rank {pmi_rank} en {socket.gethostname()} falló al importar mpi4py: {e}", file=sys.stderr, flush=True)
+            sys.exit(255)
         rank = 0
         size = 1
 
@@ -57,11 +74,16 @@ def main():
     if "--cli" in sys.argv:
         run_cli()
     else:
-        run_gui()
+        if rank == 0:
+            run_gui()
 
 def run_gui():
+    import os
+
+    import tkinter as tk
+    from gui.ventana import VentanaMonitoreo
+
     root = tk.Tk()
-    print(VentanaMonitoreo)    
     app = VentanaMonitoreo(root, controlador_factory)
     root.mainloop()
 

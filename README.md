@@ -66,3 +66,9 @@ graph TD
 - `models/`: Clases de datos (Estación, Medición, Alerta).
 - `gui/`: Interfaz gráfica con Tkinter.
 - `main.py`: Punto de entrada del sistema.
+
+
+
+## Comando de ejecución
+
+mpiexec -f mpi_hosts -n 11 python /home/flamenco/home/main.py
