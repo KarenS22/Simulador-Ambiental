@@ -85,17 +85,23 @@ A continuación se muestra la interfaz gráfica del sistema:
 
 ---
 
-## Comparativa de Rendimiento
+## Comparativa de Rendimiento y Escalabilidad en Clúster (MPI)
 
-Los resultados obtenidos muestran la escalabilidad del sistema en tres niveles de prueba (16 núcleos, Carga 10,000):
+Los resultados obtenidos prueban la escalabilidad y comportamiento del sistema distribuido sobre el clúster físico de 3 nodos (`cthulhu`, `slave1`, `slave2`).
 
-| Simulación | Secuencial | Hilos (Threading) | Procesos (Multproc.) | MPI (Clúster) |
-| :--- | :---: | :---: | :---: | :---: |
-| **4 Est. / 10 Ciclos** | 4.05s | **0.19s** | 0.28s | *Pendiente* |
-| **8 Est. / 20 Ciclos** | 17.23s | **0.78s** | 0.86s | *Pendiente* |
-| **12 Est. / 30 Ciclos** | 39.61s | **1.75s** | 1.97s | *Pendiente* |
+### Escalamiento del Clúster (Variando N | Carga = 10,000 | Ciclos = 10)
+Se midió el tiempo de ejecución lanzando diferentes cantidades de procesos concurrentes ($N$) mediante `mpiexec`:
 
-> **Análisis del GIL y Clúster:** Al utilizar Python (Free-threaded), la versión de hilos no se ve penalizada por el GIL. Hilos e IPC son excelentes localmente. En la versión paralela con MPI, el procesamiento pesado se distribuye físicamente de manera balanceada en nodos de red distribuidos mediante túneles de comunicación estructurados sobre SSH.
+| Procesos ($N$) | 4 Estaciones ($T_{4E}$) | 8 Estaciones ($T_{8E}$) | 12 Estaciones ($T_{12E}$) | Aceleración ($S$) en 12E |
+| :---: | :---: | :---: | :---: | :---: |
+| **N = 1** (Secuencial) | 0.493s | 1.000s | 1.565s | 1.00x |
+| **N = 4** | 0.361s | 0.564s | 0.739s | 2.11x |
+| **N = 8** | **0.313s** | **0.476s** | **0.516s** | **3.03x** |
+| **N = 12** | 0.512s | 0.580s | 0.559s | 2.80x |
+
+ 
+> A partir de $N=12$, el rendimiento decrece debido a que la sobrecarga del paso de mensajes TCP/IP y latencia de red de Samba supera el beneficio del paralelismo para cargas ligeras.
+
 
 ---
 
